@@ -1,4 +1,5 @@
 import express from "express"
+import mongoose from "mongoose"
 import Workout from "../models/Workout.js"
 import Activity from "../models/Activity.js"
 import auth from "../middleware/auth.js"
@@ -45,10 +46,88 @@ router.post("/", auth, async (req, res) => {
 router.get("/", auth, async (req, res) => {
   try {
     const workouts = await Workout.find({ user: req.user._id }).sort({ createdAt: -1 })
-
     res.json(workouts)
+    console.log("id-->",req.user._id)
+
   } catch (error) {
     console.error("Get workouts error:", error)
+    res.status(500).json({ message: "Server error" })
+  }
+})
+
+// @route   GET /api/workouts/summary
+// @desc    Get workout summary
+// @access  Private
+router.get("/summary", auth, async (req, res) => {
+  try {
+    const userId = req.user._id;
+    
+    // Validate user ID
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({ message: "Invalid user ID" });
+    }
+
+    // Get total workouts
+    const totalWorkouts = await Workout.countDocuments({ user: userId });
+
+    // Get total duration
+
+    
+    console.log("id-->",userId)
+    const durationResult = await Workout.aggregate([
+      { $match: { user:userId } },
+      { $group: { _id: null, total: { $sum: "$duration" } } },
+    ]);
+
+    const totalDuration = durationResult[0]?.total || 0;
+
+    // Get total calories
+    const caloriesResult = await Workout.aggregate([
+      { $match: { user: new mongoose.Types.ObjectId(userId) } },
+      { $group: { _id: null, total: { $sum: "$calories" } } },
+    ]);
+
+    const totalCalories = caloriesResult[0]?.total || 0;
+
+    res.json({
+      totalWorkouts,
+      totalDuration,
+      totalCalories,
+    });
+  } catch (error) {
+    console.error("Get workout summary error:", error);
+    res.status(500).json({ 
+      message: "Server error",
+      error: error.message 
+    });
+  }
+});
+
+// @route   GET /api/workouts/stats
+// @desc    Get workout stats for charts
+// @access  Private
+router.get("/stats", auth, async (req, res) => {
+  try {
+    // Get workouts for the last 7 days
+    const sevenDaysAgo = new Date()
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+
+    const workouts = await Workout.find({
+      user: req.user._id,
+      createdAt: { $gte: sevenDaysAgo },
+    }).sort({ createdAt: 1 })
+
+    // Format data for charts
+    const stats = workouts.map((workout) => ({
+      date: workout.createdAt.toLocaleDateString("en-US", { weekday: "short" }),
+      duration: workout.duration,
+      calories: workout.calories,
+      type: workout.type,
+    }))
+
+    res.json(stats)
+  } catch (error) {
+    console.error("Get workout stats error:", error)
     res.status(500).json({ message: "Server error" })
   }
 })
@@ -95,7 +174,11 @@ router.put("/:id", auth, async (req, res) => {
     }
 
     // Update workout
-    workout = await Workout.findByIdAndUpdate(req.params.id, { type, duration, calories, notes }, { new: true })
+    workout = await Workout.findByIdAndUpdate(
+      req.params.id, 
+      { type, duration, calories, notes }, 
+      { new: true }
+    )
 
     res.json(workout)
   } catch (error) {
@@ -133,69 +216,4 @@ router.delete("/:id", auth, async (req, res) => {
   }
 })
 
-// @route   GET /api/workouts/summary
-// @desc    Get workout summary
-// @access  Private
-router.get("/summary", auth, async (req, res) => {
-  try {
-    // Get total workouts
-    const totalWorkouts = await Workout.countDocuments({ user: req.user._id })
-
-    // Get total duration
-    const durationResult = await Workout.aggregate([
-      { $match: { user: req.user._id } },
-      { $group: { _id: null, total: { $sum: "$duration" } } },
-    ])
-
-    const totalDuration = durationResult.length > 0 ? durationResult[0].total : 0
-
-    // Get total calories
-    const caloriesResult = await Workout.aggregate([
-      { $match: { user: req.user._id } },
-      { $group: { _id: null, total: { $sum: "$calories" } } },
-    ])
-
-    const totalCalories = caloriesResult.length > 0 ? caloriesResult[0].total : 0
-
-    res.json({
-      totalWorkouts,
-      totalDuration,
-      totalCalories,
-    })
-  } catch (error) {
-    console.error("Get workout summary error:", error)
-    res.status(500).json({ message: "Server error" })
-  }
-})
-
-// @route   GET /api/workouts/stats
-// @desc    Get workout stats for charts
-// @access  Private
-router.get("/stats", auth, async (req, res) => {
-  try {
-    // Get workouts for the last 7 days
-    const sevenDaysAgo = new Date()
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
-
-    const workouts = await Workout.find({
-      user: req.user._id,
-      createdAt: { $gte: sevenDaysAgo },
-    }).sort({ createdAt: 1 })
-
-    // Format data for charts
-    const stats = workouts.map((workout) => ({
-      date: workout.createdAt.toLocaleDateString("en-US", { weekday: "short" }),
-      duration: workout.duration,
-      calories: workout.calories,
-      type: workout.type,
-    }))
-
-    res.json(stats)
-  } catch (error) {
-    console.error("Get workout stats error:", error)
-    res.status(500).json({ message: "Server error" })
-  }
-})
-
 export default router
-

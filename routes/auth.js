@@ -28,7 +28,9 @@ router.post("/register", async (req, res) => {
     await user.save()
 
     // Create JWT token
-    const token = jwt.sign({ userId: user._id }, process.env.JWT_SECRET || "secret", { expiresIn: "7d" })
+    const token = jwt.sign({
+       userId: user._id 
+      }, process.env.JWT_SECRET || "secret", { expiresIn: "7d" })
 
     // Return user data and token
     res.status(201).json({
@@ -57,14 +59,14 @@ router.post("/login", async (req, res) => {
     const user = await User.findOne({ email })
 
     if (!user) {
-      return res.status(400).json({ message: "Invalid credentials" })
+      return res.status(400).json({ message: "Invalid email" })
     }
 
     // Check password
     const isMatch = await user.comparePassword(password)
 
     if (!isMatch) {
-      return res.status(400).json({ message: "Invalid credentials" })
+      return res.status(400).json({ message: "Invalid password" })
     }
 
     // Create JWT token
@@ -82,6 +84,20 @@ router.post("/login", async (req, res) => {
     })
   } catch (error) {
     console.error("Login error:", error)
+    res.status(500).json({ message: "Server error" })
+  }
+})
+
+// @route   POST /api/auth/data
+// @desc    Get admin data
+// @access  Admin
+
+router.get("/data", async (req, res) => {
+  try {
+    const user = await User.find({})
+    res.json(user)
+  } catch (error) {
+    console.error("Get admin data error:", error)
     res.status(500).json({ message: "Server error" })
   }
 })
